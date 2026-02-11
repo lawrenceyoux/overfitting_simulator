@@ -1,0 +1,188 @@
+name: Run Data Pipeline
+
+on:
+  workflow_dispatch:  # Manual trigger only
+    inputs:
+      num_strategies:
+        description: 'Number of strategies to generate'
+        required: false
+        default: '500'
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_DIR: infrastructure/terraform
+
+jobs:
+  # ============================================
+  # Trigger Step Functions Pipeline
+  # ============================================
+  run-pipeline:
+    name: Execute Data Pipeline
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+        terraform_wrapper: false  # Disable wrapper for raw output
+    
+    - name: Terraform Init
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: terraform init
+    
+    - name: Get Step Functions ARN and S3 Bucket
+      id: aws_resources
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: |
+        SF_ARN=$(terraform output -raw step_functions_arn)
+        S3_BUCKET=$(terraform output -raw s3_bucket_name)
+        echo "step_functions_arn=$SF_ARN" >> $GITHUB_OUTPUT
+        echo "s3_bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+        echo "Step Functions ARN: $SF_ARN"
+        echo "S3 Bucket: $S3_BUCKET"
+    
+    - name: Start Step Functions Execution
+      id: execution
+      run: |
+        EXECUTION_NAME="pipeline-run-$(date +%Y%m%d-%H%M%S)"
+        
+        # Create input payload for Step Functions
+        INPUT_JSON=$(cat <<EOF
+        {
+          "bucket": "${{ steps.aws_resources.outputs.s3_bucket }}",
+          "num_strategies": ${{ github.event.inputs.num_strategies }}
+        }
+        EOF
+        )
+        
+        # Start execution
+        EXECUTION_ARN=$(aws stepfunctions start-execution \
+          --state-machine-arn "${{ steps.aws_resources.outputs.step_functions_arn }}" \
+          --name "$EXECUTION_NAME" \
+          --input "$INPUT_JSON" \
+          --query 'executionArn' \
+          --output text)
+        
+        echo "execution_arn=$EXECUTION_ARN" >> $GITHUB_OUTPUT
+        echo "execution_name=$EXECUTION_NAME" >> $GITHUB_OUTPUT
+        
+        echo "✅ Started Step Functions execution: $EXECUTION_NAME"
+        echo "📋 Execution ARN: $EXECUTION_ARN"
+    
+    - name: Wait for Execution to Complete
+      id: wait
+      run: |
+        EXECUTION_ARN="${{ steps.execution.outputs.execution_arn }}"
+        
+        echo "⏳ Waiting for pipeline execution to complete..."
+        echo "This may take several minutes..."
+        
+        # Poll execution status
+        MAX_ATTEMPTS=60  # 30 minutes max (30 seconds * 60)
+        ATTEMPT=0
+        
+        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+          STATUS=$(aws stepfunctions describe-execution \
+            --execution-arn "$EXECUTION_ARN" \
+            --query 'status' \
+            --output text)
+          
+          echo "Status: $STATUS (Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS)"
+          
+          if [ "$STATUS" == "SUCCEEDED" ]; then
+            echo "status=SUCCEEDED" >> $GITHUB_OUTPUT
+            echo "✅ Pipeline execution completed successfully!"
+            break
+          elif [ "$STATUS" == "FAILED" ] || [ "$STATUS" == "TIMED_OUT" ] || [ "$STATUS" == "ABORTED" ]; then
+            echo "status=$STATUS" >> $GITHUB_OUTPUT
+            echo "❌ Pipeline execution failed with status: $STATUS"
+            exit 1
+          fi
+          
+          sleep 30
+          ATTEMPT=$((ATTEMPT + 1))
+        done
+        
+        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+          echo "status=TIMEOUT" >> $GITHUB_OUTPUT
+          echo "⚠️ Timeout waiting for execution to complete"
+          exit 1
+        fi
+    
+    - name: Get Execution Results
+      if: steps.wait.outputs.status == 'SUCCEEDED'
+      id: results
+      run: |
+        EXECUTION_ARN="${{ steps.execution.outputs.execution_arn }}"
+        
+        # Get execution output
+        OUTPUT=$(aws stepfunctions describe-execution \
+          --execution-arn "$EXECUTION_ARN" \
+          --query 'output' \
+          --output text)
+        
+        echo "Pipeline Results:"
+        echo "$OUTPUT" | jq '.'
+        
+        # Extract key metrics
+        STRATEGIES_GENERATED=$(echo "$OUTPUT" | jq -r '.summary.strategies_generated // "N/A"')
+        BEST_STRATEGY_ID=$(echo "$OUTPUT" | jq -r '.summary.best_strategy_id // "N/A"')
+        TRAINING_WIN_RATE=$(echo "$OUTPUT" | jq -r '.summary.training_win_rate // "N/A"')
+        VALIDATION_WIN_RATE=$(echo "$OUTPUT" | jq -r '.summary.validation_win_rate // "N/A"')
+        PERFORMANCE_DROP=$(echo "$OUTPUT" | jq -r '.summary.performance_drop // "N/A"')
+        OVERFITTING=$(echo "$OUTPUT" | jq -r '.summary.overfitting_detected // "N/A"')
+        
+        echo "strategies_generated=$STRATEGIES_GENERATED" >> $GITHUB_OUTPUT
+        echo "best_strategy_id=$BEST_STRATEGY_ID" >> $GITHUB_OUTPUT
+        echo "training_win_rate=$TRAINING_WIN_RATE" >> $GITHUB_OUTPUT
+        echo "validation_win_rate=$VALIDATION_WIN_RATE" >> $GITHUB_OUTPUT
+        echo "performance_drop=$PERFORMANCE_DROP" >> $GITHUB_OUTPUT
+        echo "overfitting_detected=$OVERFITTING" >> $GITHUB_OUTPUT
+    
+    - name: Create Summary
+      if: always()
+      run: |
+        echo "## 🎲 Data Pipeline Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.wait.outputs.status }}" == "SUCCEEDED" ]; then
+          echo "### ✅ Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Strategies Generated | ${{ steps.results.outputs.strategies_generated }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Best Strategy ID | #${{ steps.results.outputs.best_strategy_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Training Win Rate | ${{ steps.results.outputs.training_win_rate }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validation Win Rate | ${{ steps.results.outputs.validation_win_rate }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance Drop | ${{ steps.results.outputs.performance_drop }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Overfitting Detected | ${{ steps.results.outputs.overfitting_detected }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Generated Assets" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Strategies saved to S3" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Backtest results saved to S3" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Validation results saved to S3" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Visualizations generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**S3 Bucket:** \`${{ steps.aws_resources.outputs.s3_bucket }}\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Status: FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pipeline execution failed with status: **${{ steps.wait.outputs.status }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the Step Functions console for detailed error logs." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Execution ARN:** \`${{ steps.execution.outputs.execution_arn }}\`" >> $GITHUB_STEP_SUMMARY
