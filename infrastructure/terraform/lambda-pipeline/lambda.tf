@@ -222,7 +222,7 @@ resource "aws_iam_role_policy" "step_functions_lambda" {
 
 # Read the state machine definition and substitute variables
 locals {
-  state_machine_definition = templatefile("${path.module}/../aws/step-functions-state-machine.json", {
+  state_machine_definition = templatefile("${path.module}/../../aws/step-functions-state-machine.json", {
     GenerateStrategiesLambdaArn = aws_lambda_function.generate_strategies.arn,
     BacktestStrategiesLambdaArn = aws_lambda_function.backtest_strategies.arn,
     SelectBestStrategyLambdaArn = aws_lambda_function.select_best.arn,
