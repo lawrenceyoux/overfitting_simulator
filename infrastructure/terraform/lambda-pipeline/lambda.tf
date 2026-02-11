@@ -5,7 +5,7 @@
 # IAM Role for Lambda Functions
 resource "aws_iam_role" "lambda_execution" {
   name = "${var.app_name}-lambda-execution-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -18,7 +18,7 @@ resource "aws_iam_role" "lambda_execution" {
       }
     ]
   })
-  
+
   tags = {
     Name = "${var.app_name}-lambda-role"
   }
@@ -34,7 +34,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
 resource "aws_iam_role_policy" "lambda_s3_access" {
   name = "${var.app_name}-lambda-s3-policy"
   role = aws_iam_role.lambda_execution.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -46,8 +46,8 @@ resource "aws_iam_role_policy" "lambda_s3_access" {
           "s3:ListBucket"
         ]
         Resource = [
-          aws_s3_bucket.data.arn,
-          "${aws_s3_bucket.data.arn}/*"
+          data.data.aws_s3_bucket.data.arn,
+          "${data.data.aws_s3_bucket.data.arn}/*"
         ]
       }
     ]
@@ -60,18 +60,18 @@ resource "aws_lambda_function" "generate_strategies" {
   role          = aws_iam_role.lambda_execution.arn
   handler       = "01_generate_strategies_lambda.lambda_handler"
   runtime       = "python3.11"
-  timeout       = 300  # 5 minutes
+  timeout       = 300 # 5 minutes
   memory_size   = 512
-  
+
   filename         = "${path.module}/../lambda/lambda_package.zip"
   source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
-  
+
   environment {
     variables = {
-      S3_BUCKET = aws_s3_bucket.data.id
+      S3_BUCKET = data.aws_s3_bucket.data.id
     }
   }
-  
+
   tags = {
     Name = "${var.app_name}-generate-strategies"
   }
@@ -83,18 +83,18 @@ resource "aws_lambda_function" "backtest_strategies" {
   role          = aws_iam_role.lambda_execution.arn
   handler       = "02_backtest_strategies_lambda.lambda_handler"
   runtime       = "python3.11"
-  timeout       = 600  # 10 minutes (backtesting can take time)
+  timeout       = 600 # 10 minutes (backtesting can take time)
   memory_size   = 1024
-  
+
   filename         = "${path.module}/../lambda/lambda_package.zip"
   source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
-  
+
   environment {
     variables = {
-      S3_BUCKET = aws_s3_bucket.data.id
+      S3_BUCKET = data.aws_s3_bucket.data.id
     }
   }
-  
+
   tags = {
     Name = "${var.app_name}-backtest-strategies"
   }
@@ -108,16 +108,16 @@ resource "aws_lambda_function" "select_best" {
   runtime       = "python3.11"
   timeout       = 180
   memory_size   = 512
-  
+
   filename         = "${path.module}/../lambda/lambda_package.zip"
   source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
-  
+
   environment {
     variables = {
-      S3_BUCKET = aws_s3_bucket.data.id
+      S3_BUCKET = data.aws_s3_bucket.data.id
     }
   }
-  
+
   tags = {
     Name = "${var.app_name}-select-best"
   }
@@ -131,16 +131,16 @@ resource "aws_lambda_function" "validate_strategy" {
   runtime       = "python3.11"
   timeout       = 300
   memory_size   = 512
-  
+
   filename         = "${path.module}/../lambda/lambda_package.zip"
   source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
-  
+
   environment {
     variables = {
-      S3_BUCKET = aws_s3_bucket.data.id
+      S3_BUCKET = data.aws_s3_bucket.data.id
     }
   }
-  
+
   tags = {
     Name = "${var.app_name}-validate-strategy"
   }
@@ -153,17 +153,17 @@ resource "aws_lambda_function" "visualize" {
   handler       = "05_visualize_lambda.lambda_handler"
   runtime       = "python3.11"
   timeout       = 300
-  memory_size   = 1024  # More memory for matplotlib
-  
+  memory_size   = 1024 # More memory for matplotlib
+
   filename         = "${path.module}/../lambda/lambda_package.zip"
   source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
-  
+
   environment {
     variables = {
-      S3_BUCKET = aws_s3_bucket.data.id
+      S3_BUCKET = data.aws_s3_bucket.data.id
     }
   }
-  
+
   tags = {
     Name = "${var.app_name}-visualize"
   }
@@ -176,7 +176,7 @@ resource "aws_lambda_function" "visualize" {
 # IAM Role for Step Functions
 resource "aws_iam_role" "step_functions" {
   name = "${var.app_name}-step-functions-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -189,7 +189,7 @@ resource "aws_iam_role" "step_functions" {
       }
     ]
   })
-  
+
   tags = {
     Name = "${var.app_name}-step-functions-role"
   }
@@ -199,7 +199,7 @@ resource "aws_iam_role" "step_functions" {
 resource "aws_iam_role_policy" "step_functions_lambda" {
   name = "${var.app_name}-step-functions-policy"
   role = aws_iam_role.step_functions.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -228,7 +228,7 @@ locals {
     SelectBestStrategyLambdaArn = aws_lambda_function.select_best.arn,
     ValidateStrategyLambdaArn   = aws_lambda_function.validate_strategy.arn,
     VisualizeLambdaArn          = aws_lambda_function.visualize.arn,
-    S3BucketName                = aws_s3_bucket.data.id
+    S3BucketName                = data.aws_s3_bucket.data.id
   })
 }
 
@@ -236,9 +236,9 @@ locals {
 resource "aws_sfn_state_machine" "data_pipeline" {
   name     = "${var.app_name}-data-pipeline"
   role_arn = aws_iam_role.step_functions.arn
-  
+
   definition = local.state_machine_definition
-  
+
   tags = {
     Name = "${var.app_name}-data-pipeline"
   }
@@ -255,7 +255,7 @@ output "step_functions_arn" {
 
 output "s3_bucket_name" {
   description = "Name of the S3 data bucket"
-  value       = aws_s3_bucket.data.id
+  value       = data.aws_s3_bucket.data.id
 }
 
 output "lambda_functions" {

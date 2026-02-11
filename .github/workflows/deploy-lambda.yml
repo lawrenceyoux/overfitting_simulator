@@ -5,13 +5,13 @@ on:
     branches: [ main ]
     paths:
       - 'infrastructure/lambda/**'
-      - 'infrastructure/terraform/lambda.tf'
+      - 'infrastructure/terraform/lambda-pipeline/**'
       - 'infrastructure/aws/step-functions-state-machine.json'
   workflow_dispatch:  # Manual trigger
 
 env:
   AWS_REGION: us-east-1
-  TERRAFORM_DIR: infrastructure/terraform
+  TERRAFORM_DIR: infrastructure/terraform/lambda-pipeline
 
 jobs:
   # ============================================
