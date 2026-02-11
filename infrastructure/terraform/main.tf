@@ -12,13 +12,14 @@ terraform {
     }
   }
   
-  backend "s3" {
-    bucket         = "overfitting-demo-terraform-state"
-    key            = "terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "terraform-state-lock"
-  }
+  # Backend configuration - uncomment after creating S3 bucket
+  # backend "s3" {
+  #   bucket         = "overfitting-demo-terraform-state"
+  #   key            = "terraform.tfstate"
+  #   region         = "us-east-1"
+  #   encrypt        = true
+  #   dynamodb_table = "terraform-state-lock"
+  # }
 }
 
 provider "aws" {
