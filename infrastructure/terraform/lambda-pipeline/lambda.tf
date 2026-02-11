@@ -1,3 +1,20 @@
+# Data sources to reference main infrastructure
+data "aws_s3_bucket" "data" {
+  bucket = "${var.app_name}-data"
+}
+
+# Upload Lambda deployment package to S3
+resource "aws_s3_object" "lambda_package" {
+  bucket = data.aws_s3_bucket.data.id
+  key    = "lambda/lambda_package.zip"
+  source = "${path.module}/../../lambda/lambda_package.zip"
+  etag   = filemd5("${path.module}/../../lambda/lambda_package.zip")
+
+  tags = {
+    Name = "lambda-deployment-package"
+  }
+}
+
 # ==============================================
 # Lambda Functions for Data Pipeline
 # ==============================================
@@ -63,8 +80,9 @@ resource "aws_lambda_function" "generate_strategies" {
   timeout       = 300 # 5 minutes
   memory_size   = 512
 
-  filename         = "${path.module}/../../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
+  s3_bucket         = data.aws_s3_bucket.data.id
+  s3_key            = aws_s3_object.lambda_package.key
+  source_code_hash  = aws_s3_object.lambda_package.etag
 
   environment {
     variables = {
@@ -86,8 +104,8 @@ resource "aws_lambda_function" "backtest_strategies" {
   timeout       = 600 # 10 minutes (backtesting can take time)
   memory_size   = 1024
 
-  filename         = "${path.module}/../../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
+  s3_bucket         = data.aws_s3_bucket.data.id
+  s3_key            = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
@@ -109,8 +127,8 @@ resource "aws_lambda_function" "select_best" {
   timeout       = 180
   memory_size   = 512
 
-  filename         = "${path.module}/../../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
+  s3_bucket         = data.aws_s3_bucket.data.id
+  s3_key            = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
@@ -132,8 +150,8 @@ resource "aws_lambda_function" "validate_strategy" {
   timeout       = 300
   memory_size   = 512
 
-  filename         = "${path.module}/../../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
+  s3_bucket         = data.aws_s3_bucket.data.id
+  s3_key            = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
@@ -155,8 +173,8 @@ resource "aws_lambda_function" "visualize" {
   timeout       = 300
   memory_size   = 1024 # More memory for matplotlib
 
-  filename         = "${path.module}/../../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
+  s3_bucket         = data.aws_s3_bucket.data.id
+  s3_key            = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
