@@ -1,13 +1,13 @@
 name: Deploy Lambda Pipeline
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'infrastructure/lambda/**'
-      - 'infrastructure/terraform/lambda-pipeline/**'
-      - 'infrastructure/aws/step-functions-state-machine.json'
-  workflow_dispatch:  # Manual trigger
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'infrastructure/lambda/**'
+  #     - 'infrastructure/terraform/lambda-pipeline/**'
+  #     - 'infrastructure/aws/step-functions-state-machine.json'
+  workflow_dispatch:  # Manual trigger only
 
 env:
   AWS_REGION: us-east-1

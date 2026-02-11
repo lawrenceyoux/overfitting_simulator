@@ -46,8 +46,8 @@ resource "aws_iam_role_policy" "lambda_s3_access" {
           "s3:ListBucket"
         ]
         Resource = [
-          data.data.aws_s3_bucket.data.arn,
-          "${data.data.aws_s3_bucket.data.arn}/*"
+          data.aws_s3_bucket.data.arn,
+          "${data.aws_s3_bucket.data.arn}/*"
         ]
       }
     ]
@@ -63,8 +63,8 @@ resource "aws_lambda_function" "generate_strategies" {
   timeout       = 300 # 5 minutes
   memory_size   = 512
 
-  filename         = "${path.module}/../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
+  filename         = "${path.module}/../../lambda/lambda_package.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
 
   environment {
     variables = {
@@ -86,8 +86,8 @@ resource "aws_lambda_function" "backtest_strategies" {
   timeout       = 600 # 10 minutes (backtesting can take time)
   memory_size   = 1024
 
-  filename         = "${path.module}/../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
+  filename         = "${path.module}/../../lambda/lambda_package.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
 
   environment {
     variables = {
@@ -109,8 +109,8 @@ resource "aws_lambda_function" "select_best" {
   timeout       = 180
   memory_size   = 512
 
-  filename         = "${path.module}/../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
+  filename         = "${path.module}/../../lambda/lambda_package.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
 
   environment {
     variables = {
@@ -132,8 +132,8 @@ resource "aws_lambda_function" "validate_strategy" {
   timeout       = 300
   memory_size   = 512
 
-  filename         = "${path.module}/../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
+  filename         = "${path.module}/../../lambda/lambda_package.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
 
   environment {
     variables = {
@@ -155,8 +155,8 @@ resource "aws_lambda_function" "visualize" {
   timeout       = 300
   memory_size   = 1024 # More memory for matplotlib
 
-  filename         = "${path.module}/../lambda/lambda_package.zip"
-  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda_package.zip")
+  filename         = "${path.module}/../../lambda/lambda_package.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../lambda/lambda_package.zip")
 
   environment {
     variables = {

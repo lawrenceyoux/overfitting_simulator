@@ -1,15 +1,15 @@
 name: Deploy Infrastructure
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'infrastructure/terraform/**'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'infrastructure/terraform/**'
-  workflow_dispatch:  # Allow manual trigger
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'infrastructure/terraform/**'
+  # pull_request:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'infrastructure/terraform/**'
+  workflow_dispatch:  # Manual trigger only
     inputs:
       action:
         description: 'Terraform action to perform'
