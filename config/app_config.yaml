@@ -1,0 +1,38 @@
+# Application Configuration
+
+# Streamlit Settings
+streamlit:
+  server:
+    port: 8501
+    address: "0.0.0.0"
+    headless: true
+  browser:
+    gather_usage_stats: false
+
+# Data Paths
+paths:
+  data: "./data"
+  results: "./results"
+  plots: "./plots"
+  
+# Strategy Generation
+strategy:
+  num_strategies: 100
+  num_trades: 200
+  train_test_split: 0.7
+
+# Backtesting
+backtesting:
+  initial_capital: 10000
+  commission: 0.001  # 0.1%
+  
+# Visualization
+visualization:
+  figure_size: [12, 6]
+  dpi: 300
+  style: "whitegrid"
+  
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

@@ -1,0 +1,141 @@
+name: Deploy Lambda Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/lambda/**'
+      - 'infrastructure/terraform/lambda.tf'
+      - 'infrastructure/aws/step-functions-state-machine.json'
+  workflow_dispatch:  # Manual trigger
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_DIR: infrastructure/terraform
+
+jobs:
+  # ============================================
+  # JOB 1: Build Lambda Package
+  # ============================================
+  build-lambda:
+    name: Build Lambda Deployment Package
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Build Lambda package
+      working-directory: infrastructure/lambda
+      run: |
+        chmod +x build_lambda_package.sh
+        ./build_lambda_package.sh
+    
+    - name: Upload Lambda package as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: lambda-package
+        path: infrastructure/lambda/lambda_package.zip
+        retention-days: 7
+
+  # ============================================
+  # JOB 2: Deploy with Terraform
+  # ============================================
+  terraform-deploy:
+    name: Deploy Lambda & Step Functions
+    runs-on: ubuntu-latest
+    needs: build-lambda
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Download Lambda package
+      uses: actions/download-artifact@v3
+      with:
+        name: lambda-package
+        path: infrastructure/lambda
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+    
+    - name: Terraform Init
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: terraform init
+    
+    - name: Terraform Plan
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: terraform plan -target=aws_lambda_function.generate_strategies -target=aws_lambda_function.backtest_strategies -target=aws_lambda_function.select_best -target=aws_lambda_function.validate_strategy -target=aws_lambda_function.visualize -target=aws_sfn_state_machine.data_pipeline -out=tfplan
+    
+    - name: Terraform Apply
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: terraform apply -auto-approve tfplan
+    
+    - name: Get Step Functions ARN
+      id: outputs
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: |
+        SF_ARN=$(terraform output -raw step_functions_arn)
+        echo "step_functions_arn=$SF_ARN" >> $GITHUB_OUTPUT
+        echo "Step Functions ARN: $SF_ARN"
+    
+    - name: Summary
+      run: |
+        echo "### Lambda Deployment Summary :rocket:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Deployed 5 Lambda functions successfully" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Updated Step Functions state machine" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Step Functions ARN:** ${{ steps.outputs.outputs.step_functions_arn }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To trigger the data pipeline manually:" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo "aws stepfunctions start-execution --state-machine-arn ${{ steps.outputs.outputs.step_functions_arn }}" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ============================================
+  # JOB 3: Upload Initial Data to S3
+  # ============================================
+  upload-data:
+    name: Upload Bitcoin Data to S3
+    runs-on: ubuntu-latest
+    needs: terraform-deploy
+    if: github.event_name == 'workflow_dispatch'  # Only on manual trigger
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Get S3 bucket name
+      id: bucket
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: |
+        BUCKET_NAME=$(terraform output -raw s3_bucket_name)
+        echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
+        echo "S3 Bucket: $BUCKET_NAME"
+    
+    - name: Upload price data to S3
+      run: |
+        aws s3 cp data/btc_price_data.csv s3://${{ steps.bucket.outputs.bucket_name }}/raw/btc_price_data.csv
+        echo "✅ Uploaded Bitcoin price data to S3"

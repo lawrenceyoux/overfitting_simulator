@@ -1,0 +1,22 @@
+{
+  "strategy_id": "strategy_003",
+  "training_metrics": {
+    "win_rate": 0.7867647058823529,
+    "total_return": 0.2081611082247889,
+    "sharpe_ratio": 7.239915678386602,
+    "max_drawdown": 0.0126664707973828,
+    "num_trades": 272
+  },
+  "validation_metrics": {
+    "win_rate": 0.5454545454545454,
+    "total_return": -0.013103513976638205,
+    "sharpe_ratio": -1.0130730537321166,
+    "max_drawdown": 0.015842139502907568,
+    "num_trades": 121
+  },
+  "performance_gap": {
+    "win_rate_drop": -0.2413101604278075,
+    "return_drop": -0.2212646222014271,
+    "sharpe_drop": -8.252988732118718
+  }
+}

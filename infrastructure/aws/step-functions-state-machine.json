@@ -1,0 +1,211 @@
+{
+  "Comment": "Overfitting Demo Data Pipeline - Orchestrates data generation, backtesting, and visualization",
+  "StartAt": "GenerateStrategies",
+  "States": {
+    "GenerateStrategies": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${GenerateStrategiesLambdaArn}",
+        "Payload": {
+          "bucket": "${S3BucketName}",
+          "num_strategies": 500
+        }
+      },
+      "ResultPath": "$.generateResult",
+      "ResultSelector": {
+        "bucket.$": "$.Payload.bucket",
+        "strategies_key.$": "$.Payload.latest_key",
+        "count.$": "$.Payload.count"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "BacktestStrategies"
+    },
+    
+    "BacktestStrategies": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${BacktestStrategiesLambdaArn}",
+        "Payload": {
+          "bucket.$": "$.generateResult.bucket",
+          "strategies_key.$": "$.generateResult.strategies_key",
+          "price_data_key": "raw/btc_price_data.csv"
+        }
+      },
+      "ResultPath": "$.backtestResult",
+      "ResultSelector": {
+        "bucket.$": "$.Payload.bucket",
+        "results_key.$": "$.Payload.results_key",
+        "strategies_tested.$": "$.Payload.strategies_tested"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "SelectBestStrategy"
+    },
+    
+    "SelectBestStrategy": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${SelectBestStrategyLambdaArn}",
+        "Payload": {
+          "bucket.$": "$.backtestResult.bucket",
+          "results_key.$": "$.backtestResult.results_key",
+          "strategies_key.$": "$.generateResult.strategies_key"
+        }
+      },
+      "ResultPath": "$.selectResult",
+      "ResultSelector": {
+        "bucket.$": "$.Payload.bucket",
+        "best_strategy_key.$": "$.Payload.best_strategy_key",
+        "best_strategy_id.$": "$.Payload.best_strategy_id",
+        "win_rate.$": "$.Payload.win_rate"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "ValidateStrategy"
+    },
+    
+    "ValidateStrategy": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ValidateStrategyLambdaArn}",
+        "Payload": {
+          "bucket.$": "$.selectResult.bucket",
+          "best_strategy_key.$": "$.selectResult.best_strategy_key",
+          "price_data_key": "raw/btc_price_data.csv"
+        }
+      },
+      "ResultPath": "$.validationResult",
+      "ResultSelector": {
+        "bucket.$": "$.Payload.bucket",
+        "validation_key.$": "$.Payload.validation_key",
+        "summary_key.$": "$.Payload.summary_key",
+        "validation_win_rate.$": "$.Payload.validation_win_rate",
+        "training_win_rate.$": "$.Payload.training_win_rate",
+        "performance_drop.$": "$.Payload.performance_drop",
+        "overfitting_detected.$": "$.Payload.overfitting_detected"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "GenerateVisualizations"
+    },
+    
+    "GenerateVisualizations": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${VisualizeLambdaArn}",
+        "Payload": {
+          "bucket.$": "$.validationResult.bucket",
+          "results_key.$": "$.backtestResult.results_key",
+          "validation_key.$": "$.validationResult.validation_key"
+        }
+      },
+      "ResultPath": "$.visualizationResult",
+      "ResultSelector": {
+        "bucket.$": "$.Payload.bucket",
+        "plots.$": "$.Payload.plots"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "PipelineComplete"
+    },
+    
+    "PipelineComplete": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "SUCCESS",
+        "message": "Data pipeline completed successfully",
+        "summary": {
+          "strategies_generated.$": "$.generateResult.count",
+          "strategies_tested.$": "$.backtestResult.strategies_tested",
+          "best_strategy_id.$": "$.selectResult.best_strategy_id",
+          "training_win_rate.$": "$.validationResult.training_win_rate",
+          "validation_win_rate.$": "$.validationResult.validation_win_rate",
+          "performance_drop.$": "$.validationResult.performance_drop",
+          "overfitting_detected.$": "$.validationResult.overfitting_detected",
+          "plots_created.$": "$.visualizationResult.plots"
+        }
+      },
+      "End": true
+    },
+    
+    "HandleError": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "FAILED",
+        "error.$": "$.error"
+      },
+      "End": true
+    }
+  }
+}
