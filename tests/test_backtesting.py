@@ -109,7 +109,9 @@ class TestValidation:
             signals = np.random.randint(0, 2, size=100)
             returns = np.random.randn(100)
             strategy_returns = signals * returns
-            win_rate = np.sum(strategy_returns > 0) / len(strategy_returns)
+            # Only count trades where we actually took a position (signal = 1)
+            num_trades = np.sum(signals)
+            win_rate = np.sum(strategy_returns > 0) / num_trades if num_trades > 0 else 0
             win_rates.append(win_rate)
         
         mean_win_rate = np.mean(win_rates)
