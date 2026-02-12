@@ -1,8 +1,3 @@
-# Data sources to reference main infrastructure
-data "aws_s3_bucket" "data" {
-  bucket = "${var.app_name}-data"
-}
-
 # Upload Lambda deployment package to S3
 resource "aws_s3_object" "lambda_package" {
   bucket = data.aws_s3_bucket.data.id
@@ -80,9 +75,9 @@ resource "aws_lambda_function" "generate_strategies" {
   timeout       = 300 # 5 minutes
   memory_size   = 512
 
-  s3_bucket         = data.aws_s3_bucket.data.id
-  s3_key            = aws_s3_object.lambda_package.key
-  source_code_hash  = aws_s3_object.lambda_package.etag
+  s3_bucket        = data.aws_s3_bucket.data.id
+  s3_key           = aws_s3_object.lambda_package.key
+  source_code_hash = aws_s3_object.lambda_package.etag
 
   environment {
     variables = {
@@ -104,8 +99,8 @@ resource "aws_lambda_function" "backtest_strategies" {
   timeout       = 600 # 10 minutes (backtesting can take time)
   memory_size   = 1024
 
-  s3_bucket         = data.aws_s3_bucket.data.id
-  s3_key            = aws_s3_object.lambda_package.key
+  s3_bucket = data.aws_s3_bucket.data.id
+  s3_key    = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
@@ -127,8 +122,8 @@ resource "aws_lambda_function" "select_best" {
   timeout       = 180
   memory_size   = 512
 
-  s3_bucket         = data.aws_s3_bucket.data.id
-  s3_key            = aws_s3_object.lambda_package.key
+  s3_bucket = data.aws_s3_bucket.data.id
+  s3_key    = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
@@ -150,8 +145,8 @@ resource "aws_lambda_function" "validate_strategy" {
   timeout       = 300
   memory_size   = 512
 
-  s3_bucket         = data.aws_s3_bucket.data.id
-  s3_key            = aws_s3_object.lambda_package.key
+  s3_bucket = data.aws_s3_bucket.data.id
+  s3_key    = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
@@ -173,8 +168,8 @@ resource "aws_lambda_function" "visualize" {
   timeout       = 300
   memory_size   = 1024 # More memory for matplotlib
 
-  s3_bucket         = data.aws_s3_bucket.data.id
-  s3_key            = aws_s3_object.lambda_package.key
+  s3_bucket = data.aws_s3_bucket.data.id
+  s3_key    = aws_s3_object.lambda_package.key
 
   environment {
     variables = {
